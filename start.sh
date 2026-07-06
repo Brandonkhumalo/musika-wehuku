@@ -28,4 +28,8 @@ gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3 &
 
 cd /app/frontend
 export PORT="${PORT:-3000}"
+# Docker auto-sets HOSTNAME to the container ID; Next's standalone server binds
+# to that literal value if present, which Railway's edge can't reach. Force it
+# to listen on all interfaces instead.
+export HOSTNAME=0.0.0.0
 exec node server.js
