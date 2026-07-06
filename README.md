@@ -92,25 +92,26 @@ working over HTTP but auth cookies won't get the `Secure` flag they should have.
 
 ## Deployment (Railway, single service)
 
-`Dockerfile.railway` builds Django and Next.js into one image and runs both with `start.sh`
-(Gunicorn on loopback `127.0.0.1:8000`, Next.js on Railway's `$PORT`). There's no nginx in this
-path — Railway's edge terminates TLS and proxies straight to the container, and Next.js already
-proxies `/api/*` and `/media/*` to Django internally.
+`Dockerfile.railway` builds Django, Next.js, *and* Postgres into one image and runs all three
+with `start.sh`: Postgres on loopback `127.0.0.1:5432` (initialized on first boot), Gunicorn on
+loopback `127.0.0.1:8000`, and Next.js on Railway's `$PORT`. Everything lives in one Railway
+service — no separate database service, no nginx (Railway's edge terminates TLS and proxies
+straight to the container; Next.js already proxies `/api/*` and `/media/*` to Django internally).
+This is a demo-grade shortcut: Postgres restarting inside an app container instead of its own
+managed service means a redeploy can briefly interrupt the database, and it's on you to attach a
+volume (below) or lose all data on the next deploy.
 
-1. **Database** — in the Railway project, "+ New" → "Docker Image" → `postgres:16`. Set
-   `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD`, and attach a volume at
-   `/var/lib/postgresql/data` so data survives restarts. This is a plain Postgres container, not
-   Railway's managed Postgres plugin — fine for a demo, but it's on you to back it up if that ever
-   matters.
-2. **App service** — "+ New" → "GitHub Repo" (or empty service + deploy from this repo), then in
+1. **Service** — "+ New" → "GitHub Repo" (or empty service + deploy from this repo), then in
    Settings → Build set **Dockerfile Path** to `Dockerfile.railway` and **Root Directory** to the
-   repo root (the build needs both `backend/` and `frontend/` as context).
-3. **Env vars** on the app service:
+   repo root (the build needs `backend/` and `frontend/` as context).
+2. **Volume** — Settings → Volumes → add one mounted at `/var/lib/postgresql/data`. Without this,
+   every redeploy wipes the database (`start.sh` re-runs `initdb` whenever that path is empty).
+3. **Env vars**:
    - `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`
    - `DJANGO_ALLOWED_HOSTS=<your-app>.up.railway.app,127.0.0.1,localhost`
-   - `DB_NAME`, `DB_USER`, `DB_PASSWORD` — same values as the Postgres service
-   - `DB_HOST=<postgres-service-name>.railway.internal`, `DB_PORT=5432` (Railway private
-     networking — check the exact hostname on the Postgres service's Settings → Networking tab)
+   - `DB_NAME`, `DB_USER`, `DB_PASSWORD` — `start.sh` creates this role/database on first boot
+     using these same values, so just pick a real password; no separate DB service to match it to.
+     (`DB_HOST`/`DB_PORT` don't need to be set — Django already defaults to `localhost`/`5432`.)
    - `CORS_ALLOWED_ORIGINS=https://<your-app>.up.railway.app`
    - `COOKIE_SECURE=true` (Railway terminates TLS at the edge, so this is safe from the start —
      unlike the docker-compose path above, there's no HTTP-only bootstrapping phase)

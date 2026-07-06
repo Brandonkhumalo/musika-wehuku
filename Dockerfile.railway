@@ -8,8 +8,9 @@
 # and Next.js already proxies /api/* and /media/* to Django internally.
 #
 # Postgres runs inside this same container (start.sh boots it on 127.0.0.1:5432)
-# instead of using a separate Railway Postgres service. This is a testing-only
-# shortcut: there's no persistent volume, so all data resets on every redeploy.
+# instead of using a separate Railway Postgres service. Attach a Railway volume
+# mounted at /var/lib/postgresql/data to this service so the data survives
+# redeploys — without one, it's wiped every time (fine for quick testing).
 
 FROM node:20-slim AS frontend-builder
 WORKDIR /frontend
