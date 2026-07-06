@@ -6,10 +6,10 @@
 set -e
 
 cd /app/backend
-python manage.py migrate --noinput
+python3 manage.py migrate --noinput
 gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3 &
 
-(while true; do sleep 300; python manage.py expire_stale_bookings; done) &
+(while true; do sleep 300; python3 manage.py expire_stale_bookings; done) &
 
 cd /app/frontend
 export PORT="${PORT:-3000}"
