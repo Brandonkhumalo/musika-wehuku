@@ -1,0 +1,46 @@
+# Single-container build for Railway: runs Django (Gunicorn) and Next.js in one
+# service so the whole app sits behind one Railway domain/port. Local/VM
+# deployment still uses docker-compose.yml + backend/Dockerfile + frontend/Dockerfile
+# + nginx — this file doesn't replace that path, it's Railway-specific.
+#
+# Django is reached by the frontend over loopback (127.0.0.1:8000), so there's no
+# nginx here: Railway's edge already terminates TLS and proxies to the container,
+# and Next.js already proxies /api/* and /media/* to Django internally.
+
+FROM node:20-slim AS frontend-builder
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ .
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    BACKEND_INTERNAL_URL=http://127.0.0.1:8000
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq-dev gcc curl gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/backend
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ .
+RUN python manage.py collectstatic --noinput
+
+WORKDIR /app/frontend
+COPY --from=frontend-builder /frontend/public ./public
+COPY --from=frontend-builder /frontend/.next/standalone ./
+COPY --from=frontend-builder /frontend/.next/static ./.next/static
+
+WORKDIR /app
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
+
+CMD ["./start.sh"]

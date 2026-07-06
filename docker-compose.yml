@@ -1,0 +1,83 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-musikawehuku}
+      POSTGRES_USER: ${DB_USER:-musikawehuku}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-musikawehuku}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-musikawehuku}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DB_NAME: ${DB_NAME:-musikawehuku}
+      DB_USER: ${DB_USER:-musikawehuku}
+      DB_PASSWORD: ${DB_PASSWORD:-musikawehuku}
+      DB_HOST: db
+      DB_PORT: 5432
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
+      PLATFORM_COMMISSION_RATE: ${PLATFORM_COMMISSION_RATE:-0.02}
+      SELLER_LISTING_FEE: ${SELLER_LISTING_FEE:-1.00}
+      BOOKING_HOLD_HOURS: ${BOOKING_HOLD_HOURS:-48}
+      BOOKING_DEPOSIT_RATE: ${BOOKING_DEPOSIT_RATE:-0.3}
+    volumes:
+      - media_data:/app/media
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+      NODE_ENV: production
+      # Set to "true" once Nginx terminates TLS in front of this stack — until
+      # then, a Secure cookie would be silently dropped by browsers over plain HTTP.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+  booking-expiry:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
+      DB_NAME: ${DB_NAME:-musikawehuku}
+      DB_USER: ${DB_USER:-musikawehuku}
+      DB_PASSWORD: ${DB_PASSWORD:-musikawehuku}
+      DB_HOST: db
+      DB_PORT: 5432
+    volumes:
+      - media_data:/app/media
+    entrypoint: >
+      sh -c "while true; do python manage.py expire_stale_bookings; sleep 300; done"
+
+volumes:
+  db_data:
+  media_data:
