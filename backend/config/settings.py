@@ -5,6 +5,7 @@ Django settings for the Musika WeHuku backend.
 from datetime import timedelta
 from pathlib import Path
 
+import dj_database_url
 from decouple import Csv, config
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -64,16 +65,21 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME", default="musikawehuku"),
-        "USER": config("DB_USER", default="musikawehuku"),
-        "PASSWORD": config("DB_PASSWORD", default="musikawehuku"),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
+if config("DATABASE_URL", default=""):
+    DATABASES = {
+        "default": dj_database_url.config(conn_max_age=600),
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": config("DB_NAME", default="musikawehuku"),
+            "USER": config("DB_USER", default="musikawehuku"),
+            "PASSWORD": config("DB_PASSWORD", default="musikawehuku"),
+            "HOST": config("DB_HOST", default="localhost"),
+            "PORT": config("DB_PORT", default="5432"),
+        }
+    }
 
 AUTH_USER_MODEL = "accounts.User"
 
